@@ -239,13 +239,37 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const data = await fetch(
-          `http://127.0.0.1:8000/api/v1/categories/user/1/all`
-        ).then((res) => res.json());
-        console.log(data);
-        setCategories(data);
+        console.log("カテゴリーデータ取得開始");
+        // 直接fetchを使用してカテゴリーデータを取得
+        const response = await fetch(
+          `http://127.0.0.1:8000/api/v1/categories/user/1/all`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("カテゴリー取得エラー:", response.status, errorText);
+          throw new Error(
+            `カテゴリー取得エラー: ${response.status} ${errorText}`
+          );
+        }
+
+        const data = await response.json();
+        console.log("カテゴリーデータ取得成功:", data);
+        if (Array.isArray(data)) {
+          setCategories(data);
+        } else {
+          console.error("カテゴリーデータが配列ではありません:", data);
+        }
       } catch (err) {
-        console.error("Error loading categories:", err);
+        console.error("カテゴリーデータ取得例外:", err);
       }
     };
     loadCategories();
@@ -277,22 +301,24 @@ export default function DashboardPage() {
     const loadInitialData = async () => {
       try {
         setIsLoading(true);
+        console.log("初期データ取得開始");
+
+        // トランザクションデータを取得
         const [currentMonthData, lastMonthData] = await Promise.all([
           getTransactions("1", currentMonth),
           getTransactions("1", addMonths(currentMonth, -1)),
         ]);
 
-        // カテゴリーデータを取得
-        const categoriesData = await fetch(
-          `http://127.0.0.1:8000/api/v1/categories/user/1/all`
-        ).then((res) => res.json());
-        setCategories(categoriesData);
-
+        console.log(
+          "トランザクションデータ取得成功:",
+          currentMonthData.length,
+          "件"
+        );
         setTransactions(currentMonthData);
         setLastMonthTransactions(lastMonthData);
         setDailyTransactions(groupTransactionsByDate(currentMonthData));
       } catch (error) {
-        console.error("Error loading initial data:", error);
+        console.error("初期データ取得エラー:", error);
       } finally {
         setIsLoading(false);
       }
@@ -793,10 +819,31 @@ export default function DashboardPage() {
                             <SelectValue placeholder="カテゴリーを選択" />
                           </SelectTrigger>
                           <SelectContent>
+                            {(() => {
+                              console.log(
+                                "レンダリング中のカテゴリー:",
+                                categories
+                              );
+                              console.log(
+                                "現在のトランザクションタイプ:",
+                                transactionType
+                              );
+                              const filteredCategories = categories.filter(
+                                (cat) =>
+                                  cat.type.toLowerCase() ===
+                                  transactionType.toLowerCase()
+                              );
+                              console.log(
+                                "フィルター後のカテゴリー:",
+                                filteredCategories
+                              );
+                              return null;
+                            })()}
                             {categories
                               .filter(
                                 (cat) =>
-                                  cat.type === transactionType.toUpperCase()
+                                  cat.type.toLowerCase() ===
+                                  transactionType.toLowerCase()
                               )
                               .map((category) => (
                                 <SelectItem

@@ -7,17 +7,33 @@ export async function getTransactions(
 ): Promise<Transaction[]> {
   try {
     const yearMonthStr = format(yearMonth, "yyyyMM");
+    console.log("トランザクション取得開始:", userId, yearMonthStr);
+
     const response = await fetch(
-      `http://127.0.0.1:8000/api/v1/transactions/user/${userId}/${yearMonthStr}`
+      `http://127.0.0.1:8000/api/v1/transactions/user/${userId}/${yearMonthStr}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
     );
 
     if (!response.ok) {
-      throw new Error("Failed to fetch transactions");
+      const errorText = await response.text();
+      console.error("トランザクション取得エラー:", response.status, errorText);
+      throw new Error(
+        `トランザクション取得エラー: ${response.status} ${errorText}`
+      );
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log("トランザクション取得成功:", data.length, "件");
+    return data;
   } catch (error) {
-    console.error("Failed to fetch transactions:", error);
+    console.error("トランザクション取得例外:", error);
     return [];
   }
 }

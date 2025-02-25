@@ -1,36 +1,36 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { 
+import { useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { format } from "date-fns"
-import { ja } from "date-fns/locale"
-import { Calendar } from "@/components/ui/calendar"
+} from "@/components/ui/select";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
-import { CalendarIcon, PencilIcon, Camera, ShoppingCart } from "lucide-react"
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { CalendarIcon, PencilIcon, Camera, ShoppingCart } from "lucide-react";
 
 type Expense = {
-  id: string
-  store: string
-  amount: number
-  category: string
-  date: Date
-  paymentMethod: string
-}
+  id: string;
+  store: string;
+  amount: number;
+  category: string;
+  date: Date;
+  paymentMethod: string;
+};
 
 export default function ReceiptsPage() {
   const [expenses, setExpenses] = useState<Expense[]>([
@@ -40,7 +40,7 @@ export default function ReceiptsPage() {
       amount: 3240,
       category: "食費",
       date: new Date("2024-02-18"),
-      paymentMethod: "現金"
+      paymentMethod: "現金",
     },
     {
       id: "2",
@@ -48,7 +48,7 @@ export default function ReceiptsPage() {
       amount: 3240,
       category: "食費",
       date: new Date("2024-02-18"),
-      paymentMethod: "現金"
+      paymentMethod: "現金",
     },
     {
       id: "3",
@@ -56,11 +56,11 @@ export default function ReceiptsPage() {
       amount: 3240,
       category: "食費",
       date: new Date("2024-02-18"),
-      paymentMethod: "現金"
-    }
-  ])
+      paymentMethod: "現金",
+    },
+  ]);
 
-  const [date, setDate] = useState<Date>(new Date())
+  const [date, setDate] = useState<Date>(new Date());
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -88,10 +88,10 @@ export default function ReceiptsPage() {
 
           <div className="space-y-2">
             <Label htmlFor="amount">金額</Label>
-            <Input 
-              id="amount" 
-              type="number" 
-              placeholder="金額を入力" 
+            <Input
+              id="amount"
+              type="number"
+              placeholder="金額を入力"
               className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
@@ -158,12 +158,15 @@ export default function ReceiptsPage() {
                   <div>
                     <h3 className="font-medium">{expense.store}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {format(expense.date, "yyyy/MM/dd")} ・ {expense.category} ・ {expense.paymentMethod}
+                      {format(expense.date, "yyyy/MM/dd")} ・ {expense.category}{" "}
+                      ・ {expense.paymentMethod}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="font-medium">¥{expense.amount.toLocaleString()}</span>
+                  <span className="font-medium">
+                    ¥{expense.amount.toLocaleString()}
+                  </span>
                   <Button variant="ghost" size="icon">
                     <PencilIcon className="h-4 w-4" />
                   </Button>
@@ -174,5 +177,5 @@ export default function ReceiptsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

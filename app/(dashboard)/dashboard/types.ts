@@ -1,16 +1,16 @@
 export interface Transaction {
   transaction_id: number;
-  amount: string;
-  transaction_date: string;
-  description: string;
-  major_category_id: number;
-  minor_category_id: number;
   user_id: number;
-  type: TransactionType;
+  type: "INCOME" | "EXPENSE";
+  major_category_id: number;
+  major_category_name: string;
+  minor_category_id?: number;
+  minor_category_name?: string;
+  amount: number;
+  description?: string;
+  transaction_date: string;
   created_at: string;
   updated_at: string;
-  major_category_name: string;
-  minor_category_name: string;
 }
 
 export interface DailyTransactions {
@@ -30,7 +30,7 @@ export interface MinorCategory {
 export interface MajorCategory {
   major_category_id: number;
   name: string;
-  type: TransactionType;
+  type: "INCOME" | "EXPENSE" | "income" | "expense"; // APIからの応答に合わせて大文字小文字両方に対応
   is_fixed: boolean;
   minor_categories: MinorCategory[];
 }
