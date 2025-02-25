@@ -9,11 +9,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check, Loader2 } from "lucide-react";
-import { Category } from "../types";
+import { MajorCategory } from "../types";
 
 interface ReceiptItemsProps {
   items: any[];
-  categories: Category[];
+  categories: MajorCategory[];
   onSave: (items: any[]) => Promise<void>;
   onCancel: () => void;
 }
@@ -56,7 +56,10 @@ export function ReceiptItems({
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+                    <SelectItem
+                      key={category.major_category_id}
+                      value={category.major_category_id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}

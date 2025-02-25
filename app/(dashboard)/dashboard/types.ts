@@ -1,50 +1,36 @@
 export interface Transaction {
-  id: string;
-  type: "income" | "expense";
-  category: string;
-  amount: number;
-  memo: string;
-  date: string; // "YYYY-MM-DD" 形式
-  category_id?: string;
-  sub_category_id?: string;
+  transaction_id: number;
+  amount: string;
+  transaction_date: string;
+  description: string;
+  major_category_id: number;
+  minor_category_id: number;
+  user_id: number;
+  type: TransactionType;
+  created_at: string;
+  updated_at: string;
+  major_category_name: string;
+  minor_category_name: string;
 }
 
 export interface DailyTransactions {
   [date: string]: Transaction[];
 }
 
-// カテゴリー名の変換用
-export const categoryMap: { [key: string]: string } = {
-  food: "食費",
-  daily: "日用品",
-  entertainment: "娯楽",
-  transport: "交通費",
-  utilities: "光熱費",
-  salary: "給与",
-  bonus: "賞与",
-  other: "その他",
-};
+// カテゴリータイプの定義（収入または支出）
+export type TransactionType = "INCOME" | "EXPENSE";
 
-export function getCategoryName(category: string): string {
-  return categoryMap[category] || category;
-}
-
-// 既存の型定義に追加
-export interface SubCategory {
-  id: string;
-  name: string;
-}
-
+// 小カテゴリーのインターフェース
 export interface MinorCategory {
-  id: string;
+  minor_category_id: number;
   name: string;
 }
 
-export interface Category {
-  id: string;
+// 大カテゴリーのインターフェース
+export interface MajorCategory {
+  major_category_id: number;
   name: string;
-  type: "income" | "expense";
-  color?: string;
-  subcategories: SubCategory[];
+  type: TransactionType;
+  is_fixed: boolean;
   minor_categories: MinorCategory[];
 }
