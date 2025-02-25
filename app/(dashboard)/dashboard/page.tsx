@@ -240,28 +240,8 @@ export default function DashboardPage() {
     const loadCategories = async () => {
       try {
         console.log("カテゴリーデータ取得開始");
-        // 直接fetchを使用してカテゴリーデータを取得
-        const response = await fetch(
-          `http://127.0.0.1:8000/api/v1/categories/user/1/all`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            cache: "no-store",
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("カテゴリー取得エラー:", response.status, errorText);
-          throw new Error(
-            `カテゴリー取得エラー: ${response.status} ${errorText}`
-          );
-        }
-
-        const data = await response.json();
+        // fetchCategories関数を使用
+        const data = await fetchCategories("1");
         console.log("カテゴリーデータ取得成功:", data);
         if (Array.isArray(data)) {
           setCategories(data);
@@ -391,13 +371,20 @@ export default function DashboardPage() {
   // 取引を削除
   const handleDeleteTransaction = async (transactionId: number) => {
     try {
+      console.log("トランザクション削除開始:", transactionId);
       await deleteTransaction(transactionId);
+
       // データを再取得
+      console.log("削除後のデータ再取得開始");
       const data = await getTransactions("1", currentMonth);
+      console.log("削除後のデータ再取得完了:", data.length, "件");
+      setTransactions(data);
       const groupedData = groupTransactionsByDate(data);
       setDailyTransactions(groupedData);
+
+      console.log("トランザクション削除完了");
     } catch (error) {
-      console.error("Failed to delete transaction:", error);
+      console.error("トランザクション削除エラー:", error);
     }
   };
 
@@ -436,14 +423,17 @@ export default function DashboardPage() {
 
     setIsRegistering(true);
     try {
+      console.log("トランザクション保存開始");
       const formData = {
         type: transactionType.toUpperCase() as "INCOME" | "EXPENSE",
         major_category_id: parseInt(mainCategory),
         minor_category_id: subCategory ? parseInt(subCategory) : undefined,
-        amount: amount,
+        amount: amount, // 文字列のまま渡す（サービス側で数値変換）
         description: memo,
         transaction_date: format(selectedDate, "yyyy-MM-dd"),
       };
+
+      console.log("保存するデータ:", formData);
 
       if (editingTransaction) {
         await updateTransaction(editingTransaction.transaction_id, formData);
@@ -453,13 +443,18 @@ export default function DashboardPage() {
 
       setShowAddDialog(false);
       resetForm();
+
       // データ再取得
+      console.log("データ再取得開始");
       const data = await getTransactions("1", currentMonth);
+      console.log("データ再取得完了:", data.length, "件");
       const groupedData = groupTransactionsByDate(data);
       setDailyTransactions(groupedData);
       setTransactions(data);
+
+      console.log("トランザクション保存完了");
     } catch (error) {
-      console.error("Error saving transaction:", error);
+      console.error("トランザクション保存エラー:", error);
     } finally {
       setIsRegistering(false);
     }

@@ -6,7 +6,7 @@ export async function fetchCategories(
   try {
     console.log("カテゴリー取得開始:", userId);
     const response = await fetch(
-      `http://127.0.0.1:8000/api/v1/categories/user/${userId}/all`,
+      `http://127.0.0.1:8000/api/v1/categories/user/${userId}/all?current_user_id=${userId}`,
       {
         method: "GET",
         headers: {
