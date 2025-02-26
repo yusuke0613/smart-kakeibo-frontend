@@ -1,34 +1,36 @@
-"use client"
+"use client";
 
-import { usePathname } from "next/navigation"
-import Link from "next/link"
-import { Avatar } from "@/components/ui/avatar"
-import { Progress } from "@/components/ui/progress"
-import { 
-  Home, 
-  Bot, 
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { Avatar } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
+import {
+  Home,
+  Bot,
   User,
   Settings,
   LogOut,
   WalletCards,
   BarChart3,
-  Tags
-} from "lucide-react"
+  Tags,
+  MessageSquare,
+} from "lucide-react";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   const navigation = [
     { name: "ホーム", href: "/dashboard", icon: Home },
     { name: "AIアドバイザー", href: "/advisor", icon: Bot },
+    { name: "AIチャット", href: "/dashboard/chat", icon: MessageSquare },
     { name: "年間収支", href: "/yearly", icon: BarChart3 },
     { name: "カテゴリー", href: "/categories", icon: Tags },
     { name: "プロフィール", href: "/profile", icon: User },
-  ]
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,21 +60,21 @@ export default function DashboardLayout({
 
           <nav className="flex-1 space-y-1 mt-8">
             {navigation.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href;
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                    isActive 
-                      ? "bg-primary text-primary-foreground" 
+                    isActive
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-accent"
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
                   {item.name}
                 </Link>
-              )
+              );
             })}
           </nav>
 
@@ -84,9 +86,7 @@ export default function DashboardLayout({
               <Settings className="h-4 w-4" />
               設定
             </Link>
-            <button
-              className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
-            >
+            <button className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent">
               <LogOut className="h-4 w-4" />
               ログアウト
             </button>
@@ -95,9 +95,7 @@ export default function DashboardLayout({
       </div>
 
       {/* メインコンテンツ */}
-      <div className="pl-72">
-        {children}
-      </div>
+      <div className="pl-72">{children}</div>
     </div>
-  )
+  );
 }
