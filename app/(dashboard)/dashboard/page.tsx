@@ -283,18 +283,43 @@ export default function DashboardPage() {
         setIsLoading(true);
         console.log("初期データ取得開始");
 
-        // トランザクションデータを取得
-        const [currentMonthData, lastMonthData] = await Promise.all([
-          getTransactions("1", currentMonth),
-          getTransactions("1", addMonths(currentMonth, -1)),
-        ]);
+        // 現在の月と過去6ヶ月分のデータを取得するための配列
+        const monthsToFetch = [];
+        for (let i = 0; i <= 5; i++) {
+          monthsToFetch.push(subMonths(currentMonth, i));
+        }
+
+        console.log(
+          "取得する月:",
+          monthsToFetch.map((m) => format(m, "yyyy-MM"))
+        );
+
+        // すべての月のデータを並行して取得
+        const allMonthsData = await Promise.all(
+          monthsToFetch.map((month) => getTransactions("1", month))
+        );
+
+        // 現在の月のデータ
+        const currentMonthData = allMonthsData[0];
+        // 先月のデータ
+        const lastMonthData = allMonthsData[1];
+        // すべての月のデータを結合
+        const allTransactions = allMonthsData.flat();
 
         console.log(
           "トランザクションデータ取得成功:",
+          "現在月:",
           currentMonthData.length,
+          "件",
+          "先月:",
+          lastMonthData.length,
+          "件",
+          "全期間:",
+          allTransactions.length,
           "件"
         );
-        setTransactions(currentMonthData);
+
+        setTransactions(allTransactions);
         setLastMonthTransactions(lastMonthData);
         setDailyTransactions(groupTransactionsByDate(currentMonthData));
       } catch (error) {
@@ -347,7 +372,7 @@ export default function DashboardPage() {
           if (!acc[categoryId]) {
             acc[categoryId] = {
               amount: 0,
-              name: transaction.major_category_name,
+              name: transaction.major_category_name || "未分類",
             };
           }
           acc[categoryId].amount += Number(transaction.amount);
@@ -428,7 +453,7 @@ export default function DashboardPage() {
         type: transactionType.toUpperCase() as "INCOME" | "EXPENSE",
         major_category_id: parseInt(mainCategory),
         minor_category_id: subCategory ? parseInt(subCategory) : undefined,
-        amount: amount, // 文字列のまま渡す（サービス側で数値変換）
+        amount: Number(amount), // 数値型に変換
         description: memo,
         transaction_date: format(selectedDate, "yyyy-MM-dd"),
       };
@@ -468,21 +493,34 @@ export default function DashboardPage() {
 
   // 過去6ヶ月分の月別支出データを計算
   const monthlyExpenseData = useMemo(() => {
-    console.log("dailyTransactions:", dailyTransactions);
-    console.log("transactions:", transactions);
+    console.log("月別支出データ計算開始");
 
-    // トランザクションから直接計算する方法に変更
+    // 過去6ヶ月分のデータを取得するための配列
     const data = [];
+
+    // 現在の月から過去6ヶ月分のデータを計算
     for (let i = 5; i >= 0; i--) {
       const targetMonth = subMonths(currentMonth, i);
       const monthStr = format(targetMonth, "M月");
+      const targetMonthStart = startOfMonth(targetMonth);
+      const targetMonthEnd = endOfMonth(targetMonth);
 
       // 対象月のトランザクションをフィルタリング
       const monthlyTransactions = transactions.filter((t: Transaction) => {
         const transactionDate = new Date(t.transaction_date);
-        return isSameMonth(transactionDate, targetMonth);
+        return (
+          transactionDate >= targetMonthStart &&
+          transactionDate <= targetMonthEnd
+        );
       });
 
+      console.log(
+        `${monthStr}のトランザクション:`,
+        monthlyTransactions.length,
+        "件"
+      );
+
+      // 月別支出を計算
       const monthlyExpense = calculateMonthlyExpense(monthlyTransactions);
       data.push({
         name: monthStr,
@@ -490,7 +528,7 @@ export default function DashboardPage() {
       });
     }
 
-    console.log("月別支出データ:", data);
+    console.log("月別支出データ計算完了:", data);
 
     // データが空の場合はダミーデータを返す
     if (data.every((item) => item.支出 === 0)) {
@@ -509,10 +547,30 @@ export default function DashboardPage() {
 
   // カテゴリー別支出データを計算
   const categoryExpenseData = useMemo(() => {
-    const categoryExpenses = transactions.reduce(
+    console.log("カテゴリー別支出データ計算開始");
+
+    // 現在の月のトランザクションのみをフィルタリング
+    const currentMonthStart = startOfMonth(currentMonth);
+    const currentMonthEnd = endOfMonth(currentMonth);
+
+    const currentMonthTransactions = transactions.filter((t: Transaction) => {
+      const transactionDate = new Date(t.transaction_date);
+      return (
+        transactionDate >= currentMonthStart &&
+        transactionDate <= currentMonthEnd
+      );
+    });
+
+    console.log(
+      "現在月のトランザクション:",
+      currentMonthTransactions.length,
+      "件"
+    );
+
+    const categoryExpenses = currentMonthTransactions.reduce(
       (acc: { [key: string]: number }, transaction) => {
         if (transaction.type === "EXPENSE") {
-          const categoryName = transaction.major_category_name;
+          const categoryName = transaction.major_category_name || "未分類";
           acc[categoryName] =
             (acc[categoryName] || 0) + Number(transaction.amount);
         }
@@ -521,13 +579,22 @@ export default function DashboardPage() {
       {}
     );
 
-    return Object.entries(categoryExpenses)
+    const result = Object.entries(categoryExpenses)
       .map(([name, value]) => ({
         name,
         value,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [transactions]);
+
+    console.log("カテゴリー別支出データ計算完了:", result);
+
+    // データが空の場合は空の配列を返す
+    if (result.length === 0) {
+      return [];
+    }
+
+    return result;
+  }, [currentMonth, transactions]);
 
   // カラーテーマを変更する関数
   const changeColorTheme = (colors: string[]) => {
@@ -1259,153 +1326,288 @@ export default function DashboardPage() {
 
           <TabsContent value="analytics" className="flex-1 overflow-hidden">
             <div className="grid gap-6 md:grid-cols-2 h-full">
-              <Card className="p-6 overflow-hidden flex flex-col">
-                <h3 className="text-lg font-semibold mb-4">月別支出推移</h3>
-                <div style={{ width: "100%", height: 300 }}>
-                  <ResponsiveLine
-                    data={[
-                      {
-                        id: "支出",
-                        color: chartColors[0],
-                        data: [
-                          { x: "1月", y: 120000 },
-                          { x: "2月", y: 150000 },
-                          { x: "3月", y: 130000 },
-                          { x: "4月", y: 170000 },
-                          { x: "5月", y: 140000 },
-                          { x: "6月", y: 160000 },
-                        ],
-                      },
-                    ]}
-                    margin={{ top: 50, right: 110, bottom: 50, left: 60 }}
-                    xScale={{ type: "point" }}
-                    yScale={{
-                      type: "linear",
-                      min: "auto",
-                      max: "auto",
-                    }}
-                    axisTop={null}
-                    axisRight={null}
-                    axisBottom={{
-                      tickSize: 5,
-                      tickPadding: 5,
-                      tickRotation: 0,
-                      legend: "月",
-                      legendOffset: 36,
-                      legendPosition: "middle",
-                    }}
-                    axisLeft={{
-                      tickSize: 5,
-                      tickPadding: 5,
-                      tickRotation: 0,
-                      legend: "金額",
-                      legendOffset: -40,
-                      legendPosition: "middle",
-                      format: (value) => `¥${value.toLocaleString()}`,
-                    }}
-                    colors={chartColors}
-                    pointSize={10}
-                    pointColor={{ theme: "background" }}
-                    pointBorderWidth={2}
-                    pointBorderColor={{ from: "serieColor" }}
-                    pointLabelYOffset={-12}
-                    useMesh={true}
-                    legends={[
-                      {
-                        anchor: "bottom-right",
-                        direction: "column",
-                        justify: false,
-                        translateX: 100,
-                        translateY: 0,
-                        itemsSpacing: 0,
-                        itemDirection: "left-to-right",
-                        itemWidth: 80,
-                        itemHeight: 20,
-                        itemOpacity: 0.75,
-                        symbolSize: 12,
-                        symbolShape: "circle",
-                        symbolBorderColor: "rgba(0, 0, 0, .5)",
-                        effects: [
-                          {
-                            on: "hover",
-                            style: {
-                              itemBackground: "rgba(0, 0, 0, .03)",
-                              itemOpacity: 1,
+              <Card className="p-4 sm:p-6 overflow-hidden flex flex-col">
+                <h3 className="text-lg font-semibold mb-2 sm:mb-4">
+                  月別支出推移
+                </h3>
+                <div className="w-full h-[250px] sm:h-[300px]">
+                  {monthlyExpenseData.length > 0 ? (
+                    <ResponsiveLine
+                      data={[
+                        {
+                          id: "支出",
+                          color: chartColors[0],
+                          data: monthlyExpenseData.map((item) => ({
+                            x: item.name,
+                            y: item.支出,
+                          })),
+                        },
+                      ]}
+                      margin={{ top: 30, right: 30, bottom: 70, left: 80 }}
+                      xScale={{ type: "point" }}
+                      yScale={{
+                        type: "linear",
+                        min: 0,
+                        max: "auto",
+                        stacked: false,
+                        reverse: false,
+                      }}
+                      axisTop={null}
+                      axisRight={null}
+                      axisBottom={{
+                        tickSize: 5,
+                        tickPadding: 5,
+                        tickRotation: 0,
+                        legend: "月",
+                        legendOffset: 40,
+                        legendPosition: "middle",
+                      }}
+                      axisLeft={{
+                        tickSize: 5,
+                        tickPadding: 5,
+                        tickRotation: 0,
+                        legend: "金額 (円)",
+                        legendOffset: -60,
+                        legendPosition: "middle",
+                        format: (value) =>
+                          value >= 1000000
+                            ? `${(value / 1000000).toFixed(1)}M`
+                            : value >= 1000
+                            ? `${(value / 1000).toFixed(0)}K`
+                            : `${value}`,
+                      }}
+                      enableGridX={false}
+                      enableGridY={true}
+                      colors={chartColors}
+                      pointSize={10}
+                      pointColor={{ theme: "background" }}
+                      pointBorderWidth={2}
+                      pointBorderColor={{ from: "serieColor" }}
+                      pointLabelYOffset={-12}
+                      useMesh={true}
+                      enableSlices="x"
+                      sliceTooltip={({ slice }) => {
+                        return (
+                          <div
+                            style={{
+                              background:
+                                theme === "dark" ? "#1e293b" : "#ffffff",
+                              padding: "9px 12px",
+                              border: `1px solid ${
+                                theme === "dark" ? "#475569" : "#ccc"
+                              }`,
+                              borderRadius: "4px",
+                              boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                              color: theme === "dark" ? "#e2e8f0" : "#334155",
+                            }}
+                          >
+                            {slice.points.map((point) => (
+                              <div
+                                key={point.id}
+                                style={{
+                                  padding: "3px 0",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      backgroundColor: point.serieColor,
+                                      borderRadius: "50%",
+                                      marginRight: 8,
+                                    }}
+                                  />
+                                  <strong>{point.data.xFormatted}</strong>: ¥
+                                  {Number(point.data.y).toLocaleString()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                      theme={{
+                        axis: {
+                          ticks: {
+                            text: {
+                              fontSize: 12,
+                              fill: theme === "dark" ? "#e2e8f0" : "#64748b",
                             },
                           },
-                        ],
-                      },
-                    ]}
-                  />
+                          legend: {
+                            text: {
+                              fontSize: 14,
+                              fontWeight: "bold",
+                              fill: theme === "dark" ? "#e2e8f0" : "#64748b",
+                            },
+                          },
+                        },
+                        grid: {
+                          line: {
+                            stroke: theme === "dark" ? "#334155" : "#e2e8f0",
+                            strokeWidth: 1,
+                          },
+                        },
+                        tooltip: {
+                          container: {
+                            fontSize: 14,
+                            background:
+                              theme === "dark" ? "#1e293b" : "#ffffff",
+                            color: theme === "dark" ? "#e2e8f0" : "#334155",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                          },
+                        },
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-muted-foreground">
+                        データがありません
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">カテゴリー別支出</h3>
-                <div style={{ width: "100%", height: 300 }}>
-                  <ResponsivePie
-                    data={[
-                      { id: "通信費", label: "通信費", value: 434243 },
-                      { id: "光熱費", label: "光熱費", value: 425766 },
-                      { id: "食費", label: "食費", value: 251460 },
-                      { id: "住居費", label: "住居費", value: 225929 },
-                      { id: "日用品", label: "日用品", value: 55050 },
-                    ]}
-                    margin={{ top: 40, right: 80, bottom: 80, left: 80 }}
-                    innerRadius={0.5}
-                    padAngle={0.7}
-                    cornerRadius={3}
-                    activeOuterRadiusOffset={8}
-                    colors={chartColors}
-                    borderWidth={1}
-                    borderColor={{
-                      from: "color",
-                      modifiers: [["darker", 0.2]],
-                    }}
-                    arcLinkLabelsSkipAngle={10}
-                    arcLinkLabelsTextColor="#333333"
-                    arcLinkLabelsThickness={2}
-                    arcLinkLabelsColor={{ from: "color" }}
-                    arcLabelsSkipAngle={10}
-                    arcLabelsTextColor={{
-                      from: "color",
-                      modifiers: [["darker", 2]],
-                    }}
-                    legends={[
-                      {
-                        anchor: "bottom",
-                        direction: "row",
-                        justify: false,
-                        translateX: 0,
-                        translateY: 56,
-                        itemsSpacing: 0,
-                        itemWidth: 100,
-                        itemHeight: 18,
-                        itemTextColor: "#999",
-                        itemDirection: "left-to-right",
-                        itemOpacity: 1,
-                        symbolSize: 18,
-                        symbolShape: "circle",
-                        effects: [
-                          {
-                            on: "hover",
-                            style: {
-                              itemTextColor: "#000",
+              <Card className="p-4 sm:p-6">
+                <h3 className="text-lg font-semibold mb-2 sm:mb-4">
+                  カテゴリー別支出
+                </h3>
+                <div className="w-full h-[250px] sm:h-[300px]">
+                  {categoryExpenseData.length > 0 ? (
+                    <ResponsivePie
+                      data={categoryExpenseData.map((item) => ({
+                        id: item.name,
+                        label: item.name,
+                        value: item.value,
+                        formattedValue: `¥${item.value.toLocaleString()}`,
+                      }))}
+                      margin={{ top: 30, right: 80, bottom: 70, left: 80 }}
+                      innerRadius={0.5}
+                      padAngle={0.7}
+                      cornerRadius={3}
+                      activeOuterRadiusOffset={8}
+                      colors={chartColors}
+                      borderWidth={1}
+                      borderColor={{
+                        from: "color",
+                        modifiers: [["darker", 0.2]],
+                      }}
+                      enableArcLinkLabels={true}
+                      arcLinkLabelsSkipAngle={10}
+                      arcLinkLabelsTextColor={
+                        theme === "dark" ? "#e2e8f0" : "#334155"
+                      }
+                      arcLinkLabelsThickness={2}
+                      arcLinkLabelsColor={{ from: "color" }}
+                      arcLinkLabelsDiagonalLength={16}
+                      arcLinkLabelsStraightLength={24}
+                      arcLinkLabelsTextOffset={6}
+                      arcLabelsSkipAngle={10}
+                      arcLabelsTextColor={{
+                        from: "color",
+                        modifiers: [["darker", 2]],
+                      }}
+                      valueFormat={(value) =>
+                        `¥${Number(value).toLocaleString()}`
+                      }
+                      tooltip={({ datum }) => (
+                        <div
+                          style={{
+                            background:
+                              theme === "dark" ? "#1e293b" : "#ffffff",
+                            padding: "9px 12px",
+                            border: `1px solid ${
+                              theme === "dark" ? "#475569" : "#ccc"
+                            }`,
+                            borderRadius: "4px",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                            color: theme === "dark" ? "#e2e8f0" : "#334155",
+                          }}
+                        >
+                          <div
+                            style={{ display: "flex", alignItems: "center" }}
+                          >
+                            <div
+                              style={{
+                                width: 12,
+                                height: 12,
+                                backgroundColor: datum.color,
+                                borderRadius: "50%",
+                                marginRight: 8,
+                              }}
+                            />
+                            <strong>{datum.label}:</strong> ¥
+                            {datum.value.toLocaleString()}
+                          </div>
+                        </div>
+                      )}
+                      legends={[
+                        {
+                          anchor: "bottom",
+                          direction: "row",
+                          justify: false,
+                          translateX: 0,
+                          translateY: 56,
+                          itemsSpacing: 2,
+                          itemWidth: 70,
+                          itemHeight: 18,
+                          itemTextColor:
+                            theme === "dark" ? "#e2e8f0" : "#64748b",
+                          itemDirection: "left-to-right",
+                          itemOpacity: 1,
+                          symbolSize: 12,
+                          symbolShape: "circle",
+                          effects: [
+                            {
+                              on: "hover",
+                              style: {
+                                itemTextColor:
+                                  theme === "dark" ? "#ffffff" : "#000000",
+                              },
                             },
+                          ],
+                        },
+                      ]}
+                      theme={{
+                        labels: {
+                          text: {
+                            fontSize: 12,
+                            fontWeight: "bold",
+                            fill: theme === "dark" ? "#e2e8f0" : "#334155",
                           },
-                        ],
-                      },
-                    ]}
-                  />
+                        },
+                        tooltip: {
+                          container: {
+                            fontSize: 14,
+                            background:
+                              theme === "dark" ? "#1e293b" : "#ffffff",
+                            color: theme === "dark" ? "#e2e8f0" : "#334155",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                          },
+                        },
+                        legends: {
+                          text: {
+                            fill: theme === "dark" ? "#e2e8f0" : "#64748b",
+                          },
+                        },
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-muted-foreground">
+                        データがありません
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-4 mt-4">
-                  {[
-                    { name: "通信費", value: 434243 },
-                    { name: "光熱費", value: 425766 },
-                    { name: "食費", value: 251460 },
-                    { name: "住居費", value: 225929 },
-                    { name: "日用品", value: 55050 },
-                  ].map((item, index) => (
+                <div className="flex flex-wrap gap-2 sm:gap-4 mt-2 sm:mt-4">
+                  {categoryExpenseData.slice(0, 5).map((item, index) => (
                     <div
                       key={item.name}
                       className="flex items-center space-x-2 min-w-[140px]"
