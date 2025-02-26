@@ -75,6 +75,9 @@ import {
 } from "./types";
 import { fetchCategories } from "./services/category-service";
 import { useTheme } from "next-themes";
+import { ReceiptUpload } from "./components/receipt-upload";
+import { ReceiptItems } from "./components/receipt-items";
+import { ReceiptItem } from "./services/receipt-service";
 
 // カスタムカレンダーの日付コンテンツ
 function CalendarDay({
@@ -223,10 +226,10 @@ export default function DashboardPage() {
   const [subCategory, setSubCategory] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [memo, setMemo] = useState<string>("");
-  const [inputMode, setInputMode] = useState<"manual" | "receipt">("manual");
+  const [inputMode, setInputMode] = useState<"manual" | "receipt">("receipt");
   const [isScanning, setIsScanning] = useState(false);
-  const [receiptItems, setReceiptItems] = useState<any[]>([]);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
+  const [selectedItems, setSelectedItems] = useState<ReceiptItem[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -234,6 +237,7 @@ export default function DashboardPage() {
   const [lastMonthTransactions, setLastMonthTransactions] = useState<
     Transaction[]
   >([]);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   // カテゴリーデータの取得
   useEffect(() => {
@@ -436,10 +440,66 @@ export default function DashboardPage() {
     setAmount("");
     setMemo("");
     setEditingTransaction(null);
-    setInputMode("manual");
+    setInputMode("receipt");
     setReceiptItems([]);
     setSelectedItems([]);
+    setReceiptError(null);
     // 注意: 日付はリセットしない（現在選択されている日付を維持）
+  };
+
+  // レシート解析完了時の処理
+  const handleReceiptAnalysisComplete = (items: ReceiptItem[]) => {
+    console.log("レシート解析完了ハンドラーが呼ばれました:", items);
+    console.log("受け取ったアイテムの数:", items.length);
+    console.log("アイテムの内容:", JSON.stringify(items, null, 2));
+    setReceiptItems(items);
+    setReceiptError(null);
+    console.log("レシートアイテムの状態を更新しました:", items.length, "件");
+  };
+
+  // レシート解析エラー時の処理
+  const handleReceiptAnalysisError = (error: string) => {
+    console.error("レシート解析エラーハンドラーが呼ばれました:", error);
+    setReceiptError(error);
+  };
+
+  // レシートアイテムの保存処理
+  const handleSaveReceiptItems = async (items: ReceiptItem[]) => {
+    setIsRegistering(true);
+    try {
+      // 各アイテムをトランザクションとして保存
+      for (const item of items) {
+        const formData = {
+          type: "EXPENSE" as "INCOME" | "EXPENSE", // 明示的に型を指定
+          major_category_id: item.major_category_id,
+          minor_category_id: item.minor_category_id,
+          amount: Number(item.amount),
+          description: item.description,
+          transaction_date: item.transaction_date,
+        };
+
+        await createTransaction(formData);
+      }
+
+      setShowAddDialog(false);
+      resetForm();
+
+      // データ再取得
+      const data = await getTransactions("1", currentMonth);
+      const groupedData = groupTransactionsByDate(data);
+      setDailyTransactions(groupedData);
+      setTransactions(data);
+    } catch (error) {
+      console.error("レシートアイテム保存エラー:", error);
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // レシートモードのキャンセル処理
+  const handleCancelReceiptItems = () => {
+    setInputMode("manual");
+    setReceiptItems([]);
   };
 
   // 取引を保存
@@ -816,91 +876,74 @@ export default function DashboardPage() {
                 収支を追加
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>
-                  {editingTransaction ? "収支の編集" : "収支の追加"}
+                  {editingTransaction ? "取引を編集" : "取引を追加"}
                 </DialogTitle>
               </DialogHeader>
-              <Tabs
-                value={inputMode}
-                onValueChange={(value) => {
-                  if (value === "manual" || value === "receipt") {
-                    setInputMode(value);
-                  }
-                }}
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="manual">手動入力</TabsTrigger>
-                  <TabsTrigger value="receipt">レシート読み取り</TabsTrigger>
-                </TabsList>
-                <TabsContent value="manual">
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label>種類</Label>
-                      <Select
-                        value={transactionType}
-                        onValueChange={(value: "income" | "expense") =>
-                          setTransactionType(value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="income">収入</SelectItem>
-                          <SelectItem value="expense">支出</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
 
-                    <div className="grid gap-2">
-                      <Label>日付</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="date"
-                          value={format(selectedDate, "yyyy-MM-dd")}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              setSelectedDate(new Date(e.target.value));
-                            }
-                          }}
-                          className="flex-1"
-                        />
+              {/* 入力モード切り替えタブ */}
+              {!editingTransaction && (
+                <Tabs
+                  value={inputMode}
+                  onValueChange={(v) => setInputMode(v as "manual" | "receipt")}
+                >
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="manual">手動入力</TabsTrigger>
+                    <TabsTrigger value="receipt">レシート読取</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="manual">
+                    {/* 既存の手動入力フォーム */}
+                    <div className="space-y-4 py-2">
+                      {/* 収支タイプ選択 */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <Button
+                          type="button"
+                          variant={
+                            transactionType === "expense"
+                              ? "default"
+                              : "outline"
+                          }
+                          className={`flex items-center justify-center ${
+                            transactionType === "expense"
+                              ? "bg-red-500 hover:bg-red-600"
+                              : ""
+                          }`}
+                          onClick={() => setTransactionType("expense")}
+                        >
+                          <ArrowDownIcon className="mr-2 h-4 w-4" />
+                          支出
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={
+                            transactionType === "income" ? "default" : "outline"
+                          }
+                          className={`flex items-center justify-center ${
+                            transactionType === "income"
+                              ? "bg-green-500 hover:bg-green-600"
+                              : ""
+                          }`}
+                          onClick={() => setTransactionType("income")}
+                        >
+                          <ArrowUpIcon className="mr-2 h-4 w-4" />
+                          収入
+                        </Button>
                       </div>
-                    </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* カテゴリー選択 */}
                       <div className="space-y-2">
-                        <Label>大カテゴリー</Label>
+                        <Label htmlFor="category">カテゴリー</Label>
                         <Select
                           value={mainCategory}
                           onValueChange={handleMainCategoryChange}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger id="category">
                             <SelectValue placeholder="カテゴリーを選択" />
                           </SelectTrigger>
                           <SelectContent>
-                            {(() => {
-                              console.log(
-                                "レンダリング中のカテゴリー:",
-                                categories
-                              );
-                              console.log(
-                                "現在のトランザクションタイプ:",
-                                transactionType
-                              );
-                              const filteredCategories = categories.filter(
-                                (cat) =>
-                                  cat.type.toLowerCase() ===
-                                  transactionType.toLowerCase()
-                              );
-                              console.log(
-                                "フィルター後のカテゴリー:",
-                                filteredCategories
-                              );
-                              return null;
-                            })()}
                             {categories
                               .filter(
                                 (cat) =>
@@ -919,112 +962,258 @@ export default function DashboardPage() {
                         </Select>
                       </div>
 
+                      {/* サブカテゴリー選択 */}
+                      {mainCategory && (
+                        <div className="space-y-2">
+                          <Label htmlFor="subcategory">サブカテゴリー</Label>
+                          <Select
+                            value={subCategory}
+                            onValueChange={setSubCategory}
+                          >
+                            <SelectTrigger id="subcategory">
+                              <SelectValue placeholder="サブカテゴリーを選択" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories
+                                .find(
+                                  (cat) =>
+                                    cat.major_category_id.toString() ===
+                                    mainCategory
+                                )
+                                ?.minor_categories.map((subCat) => (
+                                  <SelectItem
+                                    key={subCat.minor_category_id}
+                                    value={subCat.minor_category_id.toString()}
+                                  >
+                                    {subCat.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* 金額入力 */}
                       <div className="space-y-2">
-                        <Label>小カテゴリー</Label>
-                        <Select
-                          value={subCategory}
-                          onValueChange={setSubCategory}
-                          disabled={
-                            !mainCategory || minorCategories.length === 0
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="小カテゴリーを選択" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {minorCategories.map((minor: MinorCategory) => (
-                              <SelectItem
-                                key={minor.minor_category_id}
-                                value={minor.minor_category_id.toString()}
-                              >
-                                {minor.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Label htmlFor="amount">金額</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          placeholder="金額を入力"
+                        />
+                      </div>
+
+                      {/* メモ入力 */}
+                      <div className="space-y-2">
+                        <Label htmlFor="memo">メモ</Label>
+                        <Input
+                          id="memo"
+                          value={memo}
+                          onChange={(e) => setMemo(e.target.value)}
+                          placeholder="メモを入力（任意）"
+                        />
+                      </div>
+
+                      {/* 日付選択 */}
+                      <div className="space-y-2">
+                        <Label htmlFor="date">日付</Label>
+                        <Input
+                          id="date"
+                          type="date"
+                          value={format(selectedDate, "yyyy-MM-dd")}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              setSelectedDate(new Date(e.target.value));
+                            }
+                          }}
+                        />
                       </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label>金額</Label>
-                      <Input
-                        type="number"
-                        placeholder="金額を入力"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  </TabsContent>
+
+                  <TabsContent value="receipt">
+                    {receiptItems.length > 0 ? (
+                      <ReceiptItems
+                        items={receiptItems}
+                        categories={categories}
+                        onSave={handleSaveReceiptItems}
+                        onCancel={handleCancelReceiptItems}
                       />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>メモ</Label>
-                      <Input
-                        placeholder="メモを入力"
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="receipt">
-                  <div className="grid gap-4 py-4">
-                    <div className="text-center py-8">
-                      <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                      <h3 className="text-lg font-medium mb-2">
-                        レシートをスキャン
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        レシートを撮影して自動で支出を記録できます
-                      </p>
-                      <Button
-                        onClick={() => setIsScanning(true)}
-                        disabled={isScanning}
-                      >
-                        {isScanning ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            スキャン中...
-                          </>
-                        ) : (
-                          <>
-                            <Camera className="h-4 w-4 mr-2" />
-                            レシートを撮影
-                          </>
+                    ) : (
+                      <div className="space-y-4 py-4">
+                        {receiptError && (
+                          <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm mb-4">
+                            {receiptError}
+                          </div>
                         )}
-                      </Button>
-                    </div>
+                        <ReceiptUpload
+                          onAnalysisComplete={handleReceiptAnalysisComplete}
+                          onError={handleReceiptAnalysisError}
+                        />
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              )}
+
+              {/* 編集モードの場合は既存のフォームを表示 */}
+              {editingTransaction && (
+                <div className="space-y-4 py-2">
+                  {/* 収支タイプ選択 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Button
+                      type="button"
+                      variant={
+                        transactionType === "expense" ? "default" : "outline"
+                      }
+                      className={`flex items-center justify-center ${
+                        transactionType === "expense"
+                          ? "bg-red-500 hover:bg-red-600"
+                          : ""
+                      }`}
+                      onClick={() => setTransactionType("expense")}
+                    >
+                      <ArrowDownIcon className="mr-2 h-4 w-4" />
+                      支出
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={
+                        transactionType === "income" ? "default" : "outline"
+                      }
+                      className={`flex items-center justify-center ${
+                        transactionType === "income"
+                          ? "bg-green-500 hover:bg-green-600"
+                          : ""
+                      }`}
+                      onClick={() => setTransactionType("income")}
+                    >
+                      <ArrowUpIcon className="mr-2 h-4 w-4" />
+                      収入
+                    </Button>
                   </div>
-                </TabsContent>
-              </Tabs>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddDialog(false);
-                    resetForm();
-                  }}
-                >
-                  キャンセル
-                </Button>
-                <Button
-                  onClick={saveTransaction}
-                  disabled={
-                    (inputMode === "manual" && (!amount || !mainCategory)) ||
-                    (inputMode === "receipt" && selectedItems.length === 0) ||
-                    isRegistering
-                  }
-                >
-                  {isRegistering ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      登録中...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4 mr-2" />
-                      {editingTransaction ? "更新" : "登録"}
-                    </>
+
+                  {/* カテゴリー選択 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-category">カテゴリー</Label>
+                    <Select
+                      value={mainCategory}
+                      onValueChange={handleMainCategoryChange}
+                    >
+                      <SelectTrigger id="edit-category">
+                        <SelectValue placeholder="カテゴリーを選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories
+                          .filter(
+                            (cat) =>
+                              cat.type.toLowerCase() ===
+                              transactionType.toLowerCase()
+                          )
+                          .map((category) => (
+                            <SelectItem
+                              key={category.major_category_id}
+                              value={category.major_category_id.toString()}
+                            >
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* サブカテゴリー選択 */}
+                  {mainCategory && (
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-subcategory">サブカテゴリー</Label>
+                      <Select
+                        value={subCategory}
+                        onValueChange={setSubCategory}
+                      >
+                        <SelectTrigger id="edit-subcategory">
+                          <SelectValue placeholder="サブカテゴリーを選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories
+                            .find(
+                              (cat) =>
+                                cat.major_category_id.toString() ===
+                                mainCategory
+                            )
+                            ?.minor_categories.map((subCat) => (
+                              <SelectItem
+                                key={subCat.minor_category_id}
+                                value={subCat.minor_category_id.toString()}
+                              >
+                                {subCat.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
-                </Button>
-              </DialogFooter>
+
+                  {/* 金額入力 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-amount">金額</Label>
+                    <Input
+                      id="edit-amount"
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="金額を入力"
+                    />
+                  </div>
+
+                  {/* メモ入力 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-memo">メモ</Label>
+                    <Input
+                      id="edit-memo"
+                      value={memo}
+                      onChange={(e) => setMemo(e.target.value)}
+                      placeholder="メモを入力（任意）"
+                    />
+                  </div>
+
+                  {/* 日付選択 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-date">日付</Label>
+                    <Input
+                      id="edit-date"
+                      type="date"
+                      value={format(selectedDate, "yyyy-MM-dd")}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setSelectedDate(new Date(e.target.value));
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 手動入力モードまたは編集モードの場合のみ表示するフッター */}
+              {(inputMode === "manual" || editingTransaction) && (
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    onClick={saveTransaction}
+                    disabled={isRegistering || !amount || !mainCategory}
+                  >
+                    {isRegistering ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        保存中...
+                      </>
+                    ) : (
+                      "保存"
+                    )}
+                  </Button>
+                </DialogFooter>
+              )}
             </DialogContent>
           </Dialog>
         </div>
