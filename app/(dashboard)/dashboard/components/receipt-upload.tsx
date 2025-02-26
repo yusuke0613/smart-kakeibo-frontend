@@ -127,23 +127,7 @@ export function ReceiptUpload({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <Button
-            variant="outline"
-            className="h-32 relative overflow-hidden group"
-            onClick={() => {
-              // カメラ起動処理
-              // 注: 実際のカメラ機能は実装が必要
-              alert("カメラ機能は現在実装中です");
-            }}
-          >
-            <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <Camera className="h-6 w-6 mb-1 text-primary" />
-              <span>カメラで撮影</span>
-            </div>
-          </Button>
-
+        <div className="grid grid-cols-1 gap-4">
           <Button
             variant="outline"
             className="h-32 relative overflow-hidden group"
